@@ -1,0 +1,31 @@
+# API Keys & Sensitive Data
+.env
+.env.local
+.env.*.local
+js/config.js
+config.js
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (jika develop locally)
+node_modules/
+package-lock.json
+npm-debug.log
+
+# Build files
+dist/
+build/
+*.log
+
+# Backup files
+*.backup
+*.bak
