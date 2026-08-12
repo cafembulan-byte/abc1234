@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Kedai Kopi</title>
+    <!-- ✅ FOR PRODUCTION: Replace with local CSS - See PRODUCTION_SETUP.md -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="bg-gray-900 text-gray-100" id="appBody">
+    
+    <!-- Firebase SDK (UMD build - compatible with static hosting) -->
+    <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-database-compat.js"></script>
+    
+    <!-- LOGIN PAGE -->
+    <div id="loginPage" class="min-h-screen bg-gradient-to-br from-amber-900 to-gray-900 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-lg shadow-2xl p-8 max-w-md w-full border border-amber-600">
+            <div class="text-center mb-8">
+                <h1 class="text-4xl font-bold text-amber-500 mb-2">☕ Kedai Kopi</h1>
+                <p class="text-gray-400">Admin Panel</p>
+            </div>
+
+            <form id="loginForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-300 mb-2">Username</label>
+                    <input type="text" id="adminUsername" class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:border-amber-500 text-white" placeholder="admin" required>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-300 mb-2">Password</label>
+                    <input type="password" id="adminPassword" class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:border-amber-500 text-white" placeholder="••••••••" required>
+                </div>
+
+                <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 rounded-lg transition">
+                    🔓 Login
+                </button>
+
+                <div id="loginError" class="text-red-500 text-sm text-center hidden"></div>
+            </form>
+
+            <div class="mt-6 p-4 bg-gray-700 rounded text-sm text-gray-300">
+                <p class="font-semibold mb-2">Demo Credentials:</p>
+                <p>Username: <code class="text-amber-400">admin</code></p>
+                <p>Password: <code class="text-amber-400">kedai2024</code></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADMIN DASHBOARD -->
+    <div id="adminPage" class="hidden">
+        <!-- Navigation -->
+        <nav class="bg-gradient-to-r from-amber-900 to-gray-900 shadow-lg border-b border-amber-600">
+            <div class="container mx-auto px-4 py-4">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-4">
+                        <h1 class="text-2xl font-bold text-amber-500">☕ Admin Panel</h1>
+                        <span class="text-gray-400">|</span>
+                        <span id="adminName" class="text-gray-300">Admin User</span>
+                    </div>
+                    <button id="logoutBtn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition">
+                        🚪 Logout
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container mx-auto px-4 py-8">
+            <!-- Tabs Navigation -->
+            <div class="flex flex-wrap gap-2 mb-8 border-b border-gray-700">
+                <button class="tab-button active px-4 py-3 font-semibold border-b-2 border-amber-500 text-amber-500" data-tab="dashboard">
+                    📊 Dashboard
+                </button>
+                <button class="tab-button px-4 py-3 font-semibold text-gray-400 hover:text-gray-300" data-tab="menu">
+                    🍰 Menu Management
+                </button>
+                <button class="tab-button px-4 py-3 font-semibold text-gray-400 hover:text-gray-300" data-tab="reviews">
+                    ⭐ Reviews
+                </button>
+                <button class="tab-button px-4 py-3 font-semibold text-gray-400 hover:text-gray-300" data-tab="promo">
+                    🎟️ Promo Code
+                </button>
+                <button class="tab-button px-4 py-3 font-semibold text-gray-400 hover:text-gray-300" data-tab="settings">
+                    ⚙️ Settings
+                </button>
+            </div>
+
+            <!-- TAB 1: DASHBOARD -->
+            <div id="dashboard" class="tab-content">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                    <!-- Stats Cards -->
+                    <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                        <div class="text-gray-400 text-sm mb-2">Total Penjualan</div>
+                        <div id="statTotalSales" class="text-3xl font-bold text-amber-500">Rp 2.450.000</div>
+                        <div class="text-green-500 text-sm mt-2">+15% dari kemarin</div>
+                    </div>
+
+                    <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                        <div class="text-gray-400 text-sm mb-2">Total Transaksi</div>
+                        <div id="statTotalOrders" class="text-3xl font-bold text-blue-500">46</div>
+                        <div class="text-green-500 text-sm mt-2">+10% dari kemarin</div>
+                    </div>
+
+                    <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                        <div class="text-gray-400 text-sm mb-2">Total Reviews</div>
+                        <div id="statTotalReviews" class="text-3xl font-bold text-purple-500">28</div>
+                        <div class="text-gray-400 text-sm mt-2">Rating: ⭐ 4.7/5</div>
+                    </div>
+
+                    <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                        <div class="text-gray-400 text-sm mb-2">Menu Items</div>
+                        <div id="statMenuItems" class="text-3xl font-bold text-green-500">21</div>
+                        <div class="text-gray-400 text-sm mt-2">Aktif</div>
+                    </div>
+                </div>
+
+                <!-- Top Items -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                        <h3 class="text-xl font-bold text-amber-500 mb-4">🔥 Top 5 Item Terlaris</h3>
+                        <div id="topItemsList" class="space-y-3">
+                            <!-- Akan diisi oleh JavaScript -->
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                        <h3 class="text-xl font-bold text-amber-500 mb-4">📈 Revenue Chart</h3>
+                        <div class="bg-gray-700 rounded p-4 h-64 flex items-center justify-center">
+                            <p class="text-gray-400">Chart akan ditampilkan di sini (integrasikan Chart.js)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: MENU MANAGEMENT -->
+            <div id="menu" class="tab-content hidden">
+                <div class="mb-6 flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-amber-500">Menu Management</h2>
+                    <button id="addMenuBtn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg">
+                        ➕ Tambah Item
+                    </button>
+                </div>
+
+                <!-- Menu Filter by Category -->
+                <div class="flex gap-2 mb-6">
+                    <button class="menu-filter active px-4 py-2 bg-amber-600 text-white rounded-lg" data-category="all">
+                        Semua (21)
+                    </button>
+                    <button class="menu-filter px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600" data-category="espresso">
+                        Espresso (6)
+                    </button>
+                    <button class="menu-filter px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600" data-category="manual">
+                        Manual Brew (5)
+                    </button>
+                    <button class="menu-filter px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600" data-category="noncoffee">
+                        Non-Coffee (5)
+                    </button>
+                    <button class="menu-filter px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600" data-category="pastries">
+                        Pastries (5)
+                    </button>
+                </div>
+
+                <!-- Menu Items Table -->
+                <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-700 border-b border-gray-600">
+                            <tr>
+                                <th class="px-4 py-3 text-left">Nama Item</th>
+                                <th class="px-4 py-3 text-left">Kategori</th>
+                                <th class="px-4 py-3 text-left">Harga</th>
+                                <th class="px-4 py-3 text-left">Status</th>
+                                <th class="px-4 py-3 text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="menuTable" class="divide-y divide-gray-700">
+                            <!-- Akan diisi oleh JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB 3: REVIEWS -->
+            <div id="reviews" class="tab-content hidden">
+                <h2 class="text-2xl font-bold text-amber-500 mb-6">Review Management</h2>
+
+                <!-- Filter Reviews -->
+                <div class="flex gap-2 mb-6">
+                    <button class="review-filter active px-4 py-2 bg-amber-600 text-white rounded-lg" data-filter="all">
+                        Semua (28)
+                    </button>
+                    <button class="review-filter px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600" data-filter="5star">
+                        ⭐⭐⭐⭐⭐ (15)
+                    </button>
+                    <button class="review-filter px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600" data-filter="4star">
+                        ⭐⭐⭐⭐ (8)
+                    </button>
+                    <button class="review-filter px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600" data-filter="flagged">
+                        🚩 Perlu Review (1)
+                    </button>
+                </div>
+
+                <!-- Reviews List -->
+                <div id="reviewsList" class="space-y-4">
+                    <!-- Akan diisi oleh JavaScript -->
+                </div>
+            </div>
+
+            <!-- TAB 4: PROMO CODE -->
+            <div id="promo" class="tab-content hidden">
+                <div class="mb-6 flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-amber-500">Promo Code Management</h2>
+                    <button id="addPromoBtn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg">
+                        ➕ Buat Promo
+                    </button>
+                </div>
+
+                <!-- Promo List -->
+                <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-700 border-b border-gray-600">
+                            <tr>
+                                <th class="px-4 py-3 text-left">Kode</th>
+                                <th class="px-4 py-3 text-left">Diskon</th>
+                                <th class="px-4 py-3 text-left">Max Usage</th>
+                                <th class="px-4 py-3 text-left">Used</th>
+                                <th class="px-4 py-3 text-left">Status</th>
+                                <th class="px-4 py-3 text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="promoTable" class="divide-y divide-gray-700">
+                            <!-- Akan diisi oleh JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB 5: SETTINGS -->
+            <div id="settings" class="tab-content hidden">
+                <h2 class="text-2xl font-bold text-amber-500 mb-6">Settings</h2>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- API Configuration -->
+                    <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                        <h3 class="text-lg font-bold text-amber-500 mb-4">🔑 API Configuration</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-300 mb-2">Firebase Project ID</label>
+                                <input type="text" id="firebaseProjectId" class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm" readonly>
+                                <p class="text-xs text-gray-500 mt-1">Status: <span class="text-green-500">✅ Connected</span></p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-300 mb-2">Database Type</label>
+                                <select id="dbType" class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white">
+                                    <option>Firebase Firestore</option>
+                                    <option>Supabase PostgreSQL</option>
+                                </select>
+                            </div>
+                            <button class="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded-lg transition">
+                                💾 Simpan Perubahan
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Store Information -->
+                    <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                        <h3 class="text-lg font-bold text-amber-500 mb-4">🏪 Informasi Toko</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-300 mb-2">Nama Toko</label>
+                                <input type="text" id="storeName" class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" value="Kedai Kopi">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-300 mb-2">Nomor Telepon</label>
+                                <input type="tel" id="storePhone" class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" value="+628123456789">
+                            </div>
+                            <button class="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded-lg transition">
+                                💾 Simpan Perubahan
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Security -->
+                    <div class="bg-gray-800 rounded-lg p-6 border border-gray-700 lg:col-span-2">
+                        <h3 class="text-lg font-bold text-amber-500 mb-4">🔒 Keamanan</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-300 mb-2">Ubah Password</label>
+                                <div class="flex gap-2">
+                                    <input type="password" id="newPassword" class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" placeholder="Password baru">
+                                    <button class="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition">
+                                        Ubah
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="p-4 bg-gray-700 rounded">
+                                <p class="text-sm text-yellow-400 mb-2">⚠️ Peringatan Keamanan:</p>
+                                <ul class="text-xs text-gray-300 space-y-1">
+                                    <li>✅ Password di-hash di client-side</li>
+                                    <li>✅ Session disimpan di localStorage (enkripsi)</li>
+                                    <li>⚠️ Jangan share API keys ke publik</li>
+                                    <li>⚠️ Selalu gunakan HTTPS di production</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALS -->
+    
+    <!-- Add/Edit Menu Modal -->
+    <div id="menuModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-lg max-w-md w-full p-6 border border-gray-700">
+            <h3 class="text-xl font-bold text-amber-500 mb-4">Tambah/Edit Menu Item</h3>
+            <form id="menuForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-300 mb-2">Nama Item</label>
+                    <input type="text" id="menuName" class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-300 mb-2">Kategori</label>
+                    <select id="menuCategory" class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" required>
+                        <option value="espresso">Espresso Based</option>
+                        <option value="manual">Manual Brew</option>
+                        <option value="noncoffee">Non-Coffee</option>
+                        <option value="pastries">Pastries</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-300 mb-2">Deskripsi</label>
+                    <textarea id="menuDesc" class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" rows="3" required></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-300 mb-2">Harga (Rp)</label>
+                    <input type="number" id="menuPrice" class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white" required>
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg">✅ Simpan</button>
+                    <button type="button" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 rounded-lg" onclick="document.getElementById('menuModal').classList.add('hidden')">❌ Batal</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/admin.js"></script>
+</body>
+</html>
