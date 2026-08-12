@@ -4,40 +4,101 @@
 
 // ⚠️ CONFIGURATION - Update these for production
 const FIREBASE_CONFIG = {
-    apiKey: "YOUR_FIREBASE_API_KEY",
-    projectId: "your-firebase-project-id",
-    storageBucket: "your-project.appspot.com",
-    messagingSenderId: "your-sender-id",
-    appId: "your-app-id"
+    apiKey: "AIzaSyAoEluQ_FRjTAdJKiskuP-WhOshDxV-9wY",
+    authDomain: "mbulan-86894.firebaseapp.com",
+    projectId: "mbulan-86894",
+    storageBucket: "mbulan-86894.firebasestorage.app",
+    messagingSenderId: "1065694671961",
+    appId: "1:1065694671961:web:8d892222af95f2df48ed48",
+    measurementId: "G-Z4WB0T83ME"
 };
 
 // Firebase Initialization (for production setup)
 let firebaseInitialized = false;
+let db = null;
+let auth = null;
 
-if (typeof firebase !== 'undefined' && FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY') {
-    try {
-        firebase.initializeApp(FIREBASE_CONFIG);
-        firebaseInitialized = true;
-        console.log('✅ Firebase initialized for Admin Panel!');
-    } catch (error) {
-        console.error('❌ Firebase initialization error:', error);
+async function updateAdminSessionFromFirebase(user) {
+    if (!user || !db) {
+        localStorage.removeItem('adminSession');
+        return false;
     }
-} else if (typeof firebase === 'undefined') {
-    console.warn('⚠️  Firebase SDK not loaded. Add Firebase scripts to admin.html');
+
+    try {
+        const adminDoc = await db.collection('admins').doc(user.uid).get();
+        const role = adminDoc.exists ? adminDoc.data().role || 'admin' : 'user';
+
+        const session = {
+            username: user.email,
+            uid: user.uid,
+            role: role,
+            loginTime: new Date().getTime(),
+            token: btoa(user.email + ':' + new Date().getTime())
+        };
+
+        localStorage.setItem('adminSession', JSON.stringify(session));
+        return role === 'admin';
+    } catch (error) {
+        console.error('Error checking admin role:', error);
+        localStorage.removeItem('adminSession');
+        return false;
+    }
 }
 
-// Admin Credentials (Ubah di production!)
-const ADMIN_CREDENTIALS = {
-    username: 'admin',
-    password: 'kedai2024'  // ⚠️ UBAH PASSWORD INI DI PRODUCTION!
-};
+function initializeFirebaseAdmin() {
+    if (typeof firebase === 'undefined') {
+        console.warn('⚠️  Firebase SDK not loaded. Add Firebase scripts to admin.html');
+        return false;
+    }
+
+    try {
+        if (!firebase.apps.length) {
+            firebase.initializeApp(FIREBASE_CONFIG);
+        }
+        db = firebase.firestore();
+        auth = firebase.auth();
+        firebaseInitialized = true;
+        console.log('✅ Firebase initialized for Admin Panel!');
+
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                const isAdmin = await updateAdminSessionFromFirebase(user);
+                if (isAdmin) {
+                    showAdminPanel();
+                    initializeDashboard();
+                } else {
+                    localStorage.removeItem('adminSession');
+                    showLoginPage();
+                    if (auth.currentUser) {
+                        auth.signOut().catch((err) => console.error('Logout failed:', err));
+                    }
+                }
+            } else {
+                localStorage.removeItem('adminSession');
+                showLoginPage();
+            }
+        });
+
+        return true;
+    } catch (error) {
+        console.error('❌ Firebase initialization error:', error);
+        return false;
+    }
+}
+
+initializeFirebaseAdmin();
 
 // Session Management
 const AdminSession = {
-    isLoggedIn: () => localStorage.getItem('adminSession') !== null,
-    login: (username) => {
+    isLoggedIn: () => {
+        const session = JSON.parse(localStorage.getItem('adminSession') || 'null');
+        if (session && session.role === 'admin') return true;
+        return false;
+    },
+    login: (username, role = 'admin') => {
         localStorage.setItem('adminSession', JSON.stringify({
             username: username,
+            role: role,
             loginTime: new Date().getTime(),
             token: btoa(username + ':' + new Date().getTime())
         }));
@@ -56,27 +117,119 @@ const MenuManager = {
     save: (menuData) => {
         localStorage.setItem('adminMenuData', JSON.stringify(menuData));
     },
-    add: (item) => {
+    add: async (item) => {
+        const payload = {
+            name: item.name,
+            category: item.category,
+            desc: item.desc || '',
+            description: item.desc || '',
+            price: Number(item.price) || 0
+        };
+
+        if (db) {
+            try {
+                const docRef = await db.collection('menu').add(payload);
+                const data = MenuManager.getAll();
+                if (!data[item.category]) data[item.category] = [];
+                data[item.category].push({ ...payload, id: docRef.id, name: payload.name, category: payload.category, desc: payload.desc, price: payload.price });
+                MenuManager.save(data);
+                return { ...payload, id: docRef.id };
+            } catch (error) {
+                console.error('Error saving menu to Firebase:', error);
+            }
+        }
+
         const data = MenuManager.getAll();
+        if (!data[item.category]) data[item.category] = [];
         item.id = Date.now();
         data[item.category].push(item);
         MenuManager.save(data);
         return item;
     },
-    update: (category, id, updatedItem) => {
+    update: async (category, id, updatedItem) => {
+        const payload = {
+            name: updatedItem.name,
+            category: updatedItem.category,
+            desc: updatedItem.desc || '',
+            description: updatedItem.desc || '',
+            price: Number(updatedItem.price) || 0
+        };
+
+        if (db && id) {
+            try {
+                await db.collection('menu').doc(id).update(payload);
+                const data = MenuManager.getAll();
+                const targetCategory = payload.category || category;
+                const categoryItems = data[targetCategory] || [];
+                const index = categoryItems.findIndex(item => String(item.id) === String(id));
+                if (index !== -1) {
+                    categoryItems[index] = { ...categoryItems[index], ...payload, id };
+                    MenuManager.save(data);
+                }
+                return true;
+            } catch (error) {
+                console.error('Error updating menu in Firebase:', error);
+            }
+        }
+
         const data = MenuManager.getAll();
-        const index = data[category].findIndex(item => item.id === id);
+        const currentCategory = data[category] || [];
+        const index = currentCategory.findIndex(item => String(item.id) === String(id));
         if (index !== -1) {
-            data[category][index] = { ...data[category][index], ...updatedItem };
+            currentCategory[index] = { ...currentCategory[index], ...updatedItem, id };
             MenuManager.save(data);
         }
+        return true;
     },
-    delete: (category, id) => {
+    delete: async (category, id) => {
+        if (db && id) {
+            try {
+                await db.collection('menu').doc(id).delete();
+            } catch (error) {
+                console.error('Error deleting menu in Firebase:', error);
+            }
+        }
+
         const data = MenuManager.getAll();
-        data[category] = data[category].filter(item => item.id !== id);
-        MenuManager.save(data);
+        if (data[category]) {
+            data[category] = data[category].filter(item => String(item.id) !== String(id));
+            MenuManager.save(data);
+        }
+        return true;
     }
 };
+
+async function syncMenuFromFirebase() {
+    if (!db) return MenuManager.getAll();
+
+    try {
+        const snapshot = await db.collection('menu').get();
+        const grouped = {};
+
+        snapshot.forEach(doc => {
+            const item = doc.data();
+            const category = item.category || 'espresso';
+            if (!grouped[category]) grouped[category] = [];
+            grouped[category].push({
+                id: doc.id,
+                name: item.name,
+                category,
+                desc: item.desc || item.description || '',
+                description: item.desc || item.description || '',
+                price: Number(item.price) || 0
+            });
+        });
+
+        if (Object.keys(grouped).length > 0) {
+            MenuManager.save(grouped);
+            return grouped;
+        }
+    } catch (error) {
+        console.error('Error syncing menu from Firebase:', error);
+    }
+
+    return MenuManager.getAll();
+}
 
 // Generate default menu data
 function generateDefaultMenuData() {
@@ -134,11 +287,13 @@ const PromoManager = {
 // PAGE INITIALIZATION
 // ============================================================================
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    initializeFirebaseAdmin();
+
     // Cek apakah user sudah login
     if (AdminSession.isLoggedIn()) {
         showAdminPanel();
-        initializeDashboard();
+        await initializeDashboard();
     } else {
         showLoginPage();
     }
@@ -151,6 +306,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.tab-button').forEach(btn => {
         btn.addEventListener('click', switchTab);
     });
+
+    const createAdminBtn = document.getElementById('createAdminBtn');
+    if (createAdminBtn) {
+        createAdminBtn.addEventListener('click', createAdminUser);
+    }
 
     // Menu Buttons
     document.getElementById('addMenuBtn').addEventListener('click', openMenuModal);
@@ -176,25 +336,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function handleLogin(e) {
     e.preventDefault();
-    
-    const username = document.getElementById('adminUsername').value;
+
+    const email = document.getElementById('adminUsername').value.trim();
     const password = document.getElementById('adminPassword').value;
     const errorDiv = document.getElementById('loginError');
 
-    // Simple validation (di production, gunakan server-side authentication!)
-    if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
-        AdminSession.login(username);
-        showAdminPanel();
-        initializeDashboard();
-        errorDiv.classList.add('hidden');
-    } else {
-        errorDiv.textContent = '❌ Username atau password salah!';
+    if (!email || !password) {
+        errorDiv.textContent = '❌ Email dan password wajib diisi!';
         errorDiv.classList.remove('hidden');
+        return;
     }
+
+    if (!auth) {
+        errorDiv.textContent = '❌ Firebase Authentication belum siap. Cek konfigurasi Firebase.';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+
+    auth.signInWithEmailAndPassword(email, password)
+        .then(async () => {
+            const user = auth.currentUser;
+            const isAdmin = user ? await updateAdminSessionFromFirebase(user) : false;
+
+            if (!isAdmin) {
+                errorDiv.textContent = '❌ Akun ini bukan admin terdaftar.';
+                errorDiv.classList.remove('hidden');
+                auth.signOut().catch((err) => console.error('Logout failed:', err));
+                return;
+            }
+
+            errorDiv.classList.add('hidden');
+            showAdminPanel();
+            initializeDashboard();
+        })
+        .catch((error) => {
+            console.error('Login error:', error);
+            errorDiv.textContent = '❌ Email atau password salah, atau akun belum dibuat di Firebase Auth.';
+            errorDiv.classList.remove('hidden');
+        });
 }
 
 function handleLogout() {
     if (confirm('Yakin ingin logout?')) {
+        if (auth) {
+            auth.signOut().catch((error) => console.error('Logout error:', error));
+        }
         AdminSession.logout();
         showLoginPage();
     }
@@ -208,9 +394,16 @@ function showLoginPage() {
 function showAdminPanel() {
     document.getElementById('loginPage').classList.add('hidden');
     document.getElementById('adminPage').classList.remove('hidden');
-    
+
     const session = AdminSession.getSession();
-    document.getElementById('adminName').textContent = `${session.username} (Admin)`;
+    const currentUserEmail = auth && auth.currentUser ? auth.currentUser.email : session?.username;
+    document.getElementById('adminName').textContent = `${currentUserEmail || 'Admin'} (Admin)`;
+
+    const createAdminSection = document.getElementById('createAdminSection');
+    if (createAdminSection) {
+        const isAdminAuthorized = session && session.role === 'admin';
+        createAdminSection.style.display = isAdminAuthorized ? 'block' : 'none';
+    }
 }
 
 // ============================================================================
@@ -248,10 +441,15 @@ function switchTab(e) {
 // DASHBOARD
 // ============================================================================
 
-function initializeDashboard() {
+async function initializeDashboard() {
+    if (firebaseInitialized || initializeFirebaseAdmin()) {
+        await syncMenuFromFirebase();
+    }
+
     // Load stats
     updateDashboardStats();
     renderTopItems();
+    renderMenuTable();
 }
 
 function updateDashboardStats() {
@@ -359,35 +557,79 @@ function renderMenuRow(category, item) {
     `;
 }
 
-function openMenuModal() {
-    document.getElementById('menuModal').classList.remove('hidden');
+function closeMenuModal() {
+    document.getElementById('menuModal').classList.add('hidden');
     document.getElementById('menuForm').reset();
+    document.getElementById('menuDocId').value = '';
+    document.getElementById('menuModalTitle').textContent = 'Tambah/Edit Menu Item';
+    document.getElementById('menuSubmitBtn').textContent = '✅ Simpan';
 }
 
-function handleMenuSubmit(e) {
+function openMenuModal(item = null) {
+    document.getElementById('menuModal').classList.remove('hidden');
+    document.getElementById('menuForm').reset();
+
+    if (item) {
+        document.getElementById('menuDocId').value = item.id;
+        document.getElementById('menuName').value = item.name || '';
+        document.getElementById('menuCategory').value = item.category || 'espresso';
+        document.getElementById('menuDesc').value = item.desc || item.description || '';
+        document.getElementById('menuPrice').value = item.price || 0;
+        document.getElementById('menuModalTitle').textContent = 'Edit Menu Item';
+        document.getElementById('menuSubmitBtn').textContent = '✅ Update';
+    } else {
+        document.getElementById('menuDocId').value = '';
+        document.getElementById('menuModalTitle').textContent = 'Tambah Menu Item';
+        document.getElementById('menuSubmitBtn').textContent = '✅ Simpan';
+    }
+}
+
+async function handleMenuSubmit(e) {
     e.preventDefault();
 
+    const id = document.getElementById('menuDocId').value;
     const item = {
-        name: document.getElementById('menuName').value,
+        name: document.getElementById('menuName').value.trim(),
         category: document.getElementById('menuCategory').value,
-        desc: document.getElementById('menuDesc').value,
-        price: parseInt(document.getElementById('menuPrice').value)
+        desc: document.getElementById('menuDesc').value.trim(),
+        price: parseInt(document.getElementById('menuPrice').value, 10)
     };
 
-    MenuManager.add(item);
-    document.getElementById('menuModal').classList.add('hidden');
+    if (!item.name || !item.desc || Number.isNaN(item.price) || item.price <= 0) {
+        showNotification('⚠️ Isi semua field menu dengan benar!');
+        return;
+    }
+
+    if (id) {
+        await MenuManager.update(item.category, id, item);
+        showNotification('✅ Menu item berhasil diupdate!');
+    } else {
+        await MenuManager.add(item);
+        showNotification('✅ Menu item berhasil ditambahkan!');
+    }
+
+    closeMenuModal();
+    await syncMenuFromFirebase();
     renderMenuTable();
     updateDashboardStats();
-    showNotification('✅ Menu item berhasil ditambahkan!');
 }
 
 function editMenuItem(category, id) {
-    alert('Edit feature coming soon! Menu ID: ' + id);
+    const menuData = MenuManager.getAll();
+    const items = menuData[category] || [];
+    const item = items.find(entry => String(entry.id) === String(id));
+
+    if (item) {
+        openMenuModal(item);
+    } else {
+        showNotification('⚠️ Item menu tidak ditemukan.');
+    }
 }
 
-function deleteMenuItem(category, id) {
+async function deleteMenuItem(category, id) {
     if (confirm('Yakin ingin menghapus item ini?')) {
-        MenuManager.delete(category, id);
+        await MenuManager.delete(category, id);
+        await syncMenuFromFirebase();
         renderMenuTable();
         updateDashboardStats();
         showNotification('✅ Menu item berhasil dihapus!');
@@ -499,6 +741,46 @@ function deletePromo(id) {
 // ============================================================================
 // UTILITIES
 // ============================================================================
+
+async function createAdminUser() {
+    const session = AdminSession.getSession();
+    if (!session || session.role !== 'admin') {
+        showNotification('⚠️ Hanya admin yang sudah login yang bisa membuat akun admin baru.');
+        return;
+    }
+
+    const email = document.getElementById('newAdminEmail').value.trim();
+    const password = document.getElementById('newAdminPassword').value;
+
+    if (!email || !password) {
+        showNotification('⚠️ Email dan password wajib diisi!');
+        return;
+    }
+
+    if (!auth) {
+        showNotification('⚠️ Firebase Auth belum siap. Periksa konfigurasi Firebase.');
+        return;
+    }
+
+    try {
+        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+
+        if (db) {
+            await db.collection('admins').doc(userCredential.user.uid).set({
+                email: email,
+                role: 'admin',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+
+        document.getElementById('newAdminEmail').value = '';
+        document.getElementById('newAdminPassword').value = '';
+        showNotification('✅ Akun admin berhasil dibuat!');
+    } catch (error) {
+        console.error('Error creating admin:', error);
+        showNotification('❌ Gagal membuat akun admin: ' + (error.message || 'Unknown error'));
+    }
+}
 
 function showNotification(message) {
     const notification = document.createElement('div');

@@ -4,11 +4,13 @@
 
 // ▶ Untuk Firebase:
 const FIREBASE_CONFIG = {
-    apiKey: "YOUR_FIREBASE_API_KEY",
-    projectId: "your-firebase-project-id",
-    storageBucket: "your-project.appspot.com",
-    messagingSenderId: "your-sender-id",
-    appId: "your-app-id"
+    apiKey: "AIzaSyAoEluQ_FRjTAdJKiskuP-WhOshDxV-9wY",
+    authDomain: "mbulan-86894.firebaseapp.com",
+    projectId: "mbulan-86894",
+    storageBucket: "mbulan-86894.firebasestorage.app",
+    messagingSenderId: "1065694671961",
+    appId: "1:1065694671961:web:8d892222af95f2df48ed48",
+    measurementId: "G-Z4WB0T83ME"
 };
 
 // ▶ Untuk Supabase:
@@ -101,7 +103,7 @@ document.addEventListener('keydown', (e) => {
 // 2. MENU SYSTEM
 // ============================================================================
 
-const menuData = {
+const FALLBACK_MENU_DATA = {
     espresso: [
         { name: "Espresso", desc: "Kopi hitam pekat dengan crema kaya", price: 25000 },
         { name: "Americano", desc: "Espresso dengan air panas", price: 30000 },
@@ -133,19 +135,28 @@ const menuData = {
     ]
 };
 
+let menuData = JSON.parse(JSON.stringify(FALLBACK_MENU_DATA));
+
 const menuContainer = document.getElementById('menuContainer');
 const categoryTabs = document.querySelectorAll('.category-tab');
 
 function renderMenu(category) {
+    const currentItems = menuData[category] || FALLBACK_MENU_DATA[category] || [];
     menuContainer.innerHTML = '';
-    menuData[category].forEach(item => {
+
+    if (!currentItems.length) {
+        menuContainer.innerHTML = '<p class="text-center text-gray-500 py-8">Menu belum tersedia.</p>';
+        return;
+    }
+
+    currentItems.forEach(item => {
         const card = document.createElement('div');
         card.className = 'bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition';
         card.innerHTML = `
             <h3 class="text-xl font-bold text-amber-900 mb-2">${item.name}</h3>
-            <p class="text-gray-600 text-sm mb-4">${item.desc}</p>
+            <p class="text-gray-600 text-sm mb-4">${item.desc || item.description || ''}</p>
             <div class="flex justify-between items-center">
-                <span class="text-2xl font-bold text-amber-600">Rp ${item.price.toLocaleString('id-ID')}</span>
+                <span class="text-2xl font-bold text-amber-600">Rp ${(Number(item.price) || 0).toLocaleString('id-ID')}</span>
                 <button class="add-to-cart bg-amber-900 text-white px-4 py-2 rounded-lg hover:bg-amber-800 transition" data-name="${item.name}">
                     + Pesan
                 </button>
@@ -183,13 +194,58 @@ async function initializeFirebase() {
             firebase.initializeApp(FIREBASE_CONFIG);
             db = firebase.firestore();
             console.log('✓ Firebase initialized successfully');
-            loadReviewsFromFirebase();
+            await loadMenuFromFirebase();
+            await loadReviewsFromFirebase();
             // Note: Analytics removed from public website (admin only)
         } else {
             console.warn('⚠ Firebase SDK tidak dimuat. Pastikan Anda sudah menambahkan script Firebase di index.html');
         }
     } catch (error) {
         console.error('✗ Firebase initialization error:', error);
+    }
+}
+
+async function loadMenuFromFirebase() {
+    if (!db) return;
+
+    try {
+        const menuSnapshot = await db.collection('menu').get();
+
+        if (menuSnapshot.empty) {
+            console.log('ℹ️ No menu data found in Firestore, using fallback menu.');
+            menuData = JSON.parse(JSON.stringify(FALLBACK_MENU_DATA));
+            renderMenu('espresso');
+            return;
+        }
+
+        const firebaseMenuData = {};
+        menuSnapshot.forEach(doc => {
+            const item = doc.data();
+            const category = item.category || 'espresso';
+            if (!firebaseMenuData[category]) {
+                firebaseMenuData[category] = [];
+            }
+
+            firebaseMenuData[category].push({
+                name: item.name,
+                desc: item.description || item.desc || '',
+                price: Number(item.price) || 0
+            });
+        });
+
+        if (Object.keys(firebaseMenuData).length > 0) {
+            menuData = firebaseMenuData;
+            const currentCategory = document.querySelector('.category-tab.active')?.getAttribute('data-category') || 'espresso';
+            renderMenu(currentCategory);
+            console.log('✓ Menu loaded from Firebase Firestore');
+        } else {
+            menuData = JSON.parse(JSON.stringify(FALLBACK_MENU_DATA));
+            renderMenu('espresso');
+        }
+    } catch (error) {
+        console.error('✗ Error loading menu from Firebase:', error);
+        menuData = JSON.parse(JSON.stringify(FALLBACK_MENU_DATA));
+        renderMenu('espresso');
     }
 }
 
