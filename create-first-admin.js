@@ -12,6 +12,8 @@
  */
 
 const admin = require('firebase-admin');
+const { getAuth } = require('firebase-admin/auth');
+const { getFirestore } = require('firebase-admin/firestore');
 const readline = require('readline');
 const fs = require('fs');
 const path = require('path');
@@ -52,14 +54,18 @@ async function createFirstAdmin() {
         }
 
         // Initialize Firebase Admin SDK
-        const serviceAccount = require(keyPath);
+        console.log('📋 Loading service account...');
+        const serviceAccountData = fs.readFileSync(keyPath, 'utf8');
+        const serviceAccount = JSON.parse(serviceAccountData);
+        console.log('✅ Service account loaded');
+        console.log('🔧 Initializing Firebase Admin SDK...');
         admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount),
+            credential: admin.cert(serviceAccount),
             projectId: serviceAccount.project_id
         });
 
-        const auth = admin.auth();
-        const db = admin.firestore();
+        const auth = getAuth();
+        const db = getFirestore();
 
         console.log('✅ Firebase Admin SDK initialized\n');
 
